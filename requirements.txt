@@ -1,0 +1,6 @@
+# requirements.txt
+# Libraries required for the CDR ingestion script.
+
+requests
+mysql-connector-python
+python-dotenv
