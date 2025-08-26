@@ -1,10 +1,10 @@
 Python ETL Pipeline for CDR API to MySQL Data Warehouse
-📝 Objective
+Objective
 This project provides a robust, two-phase ETL (Extract, Transform, Load) pipeline in Python. It is designed to fetch Call Detail Records (CDRs) from a REST API, load the raw data into a staging table, and then transform it into a structured star schema within a MySQL database, making it ready for analytics and business intelligence.
 
-The pipeline is designed to be executed on a recurring schedule (e.g., hourly) and handles pagination, duplicate records, and data transformation automatically.
+The pipeline is designed to be executed on a recurring schedule (e.g., hourly) and handles pagination, duplicate records, and complex data transformations automatically.
 
-📂 Code Structure
+Code Structure
 The project is organized into the following files:
 
 run_pipeline.py: (Main Script) The master script used to execute the entire ETL pipeline in the correct sequence.
@@ -21,7 +21,7 @@ schema.sql: The SQL script to create the initial raw data staging table.
 
 schema_phase2.sql: The complete SQL script to create all final dimension and fact tables for the data warehouse.
 
-🚀 Getting Started
+Getting Started
 Follow these steps to set up and run the ETL pipeline.
 
 Prerequisites
@@ -49,15 +49,6 @@ CREATE USER 'your_db_user'@'localhost' IDENTIFIED BY 'your_db_password';
 GRANT ALL PRIVILEGES ON your_db_name.* TO 'your_db_user'@'localhost';
 FLUSH PRIVILEGES;
 Run the contents of the schema_phase2.sql file to create all the necessary tables (cdr_raw_data, fact_calls, and all dim_ tables) inside your new database. Make sure to add USE your_db_name; at the top of the script before running it.
-
-Duplicate Handling
-The pipeline is resilient against duplicate data. This is achieved at multiple levels:
-
-The cdr_raw_data staging table has a UNIQUE index on the msg_id column.
-
-The Phase 1 script (cdr_ingestion.py) uses an INSERT IGNORE command, which instructs MySQL to gracefully skip any record whose msg_id already exists.
-
-The final fact_calls table also has a UNIQUE index on msg_id to provide a final layer of data integrity.
 
 2. Installation
 Clone the repository or download the project files.
@@ -102,7 +93,8 @@ DB_HOST="localhost"
 DB_USER="your_db_user"
 DB_PASSWORD="your_db_password"
 DB_NAME="your_db_name"
-▶️ How to Run the Pipeline
+
+How to Run the Pipeline
 To run the entire ETL process, execute the main pipeline script. This will run Phase 1 first, followed immediately by Phase 2.
 
 Make sure your virtual environment is activated.
@@ -114,7 +106,7 @@ Bash
 python run_pipeline.py
 The script will print detailed log messages to the console, showing the progress of both phases, the number of records ingested and transformed, and any warnings or errors that occur.
 
-⚙️ Scheduling the Pipeline
+Scheduling the Pipeline
 For automation, you should schedule the run_pipeline.py script to run at your desired interval (e.g., every hour).
 
 Scheduling with Cron (Linux/macOS)
@@ -144,3 +136,24 @@ Add arguments (optional): Enter the name of the master script: run_pipeline.py.
 Start in (optional): Provide the full path to your project's root folder (e.g., C:\path\to\your\project).
 
 Review the settings and click Finish.
+
+Data Handling and Business Logic
+The pipeline includes several key features to ensure data quality and integrity:
+
+Duplicate Handling: Resilience against duplicate data is achieved at multiple levels. The cdr_raw_data staging table and the final fact_calls table both have a UNIQUE index on the msg_id column. Additionally, the ingestion script uses an INSERT IGNORE command, which instructs MySQL to gracefully skip any record whose msg_id already exists.
+
+Nested JSON Parsing: The ETL script is designed to parse complex, nested JSON objects within the raw CDR data. It specifically extracts detailed agent disposition information from the fonoUC object, including:
+
+Follow-up Notes: Captures manual notes left by agents.
+
+Nested Subdispositions: Handles up to two levels of subdispositions (e.g., Sale -> Lead Converted -> Manually Assigned).
+
+Robust Phone Number Parsing: The script contains intelligent logic to handle a variety of phone number formats:
+
+It correctly identifies and processes standard international numbers (e.g., +971...).
+
+It handles local UAE numbers by defaulting to the "AE" region.
+
+It corrects malformed international numbers that start with a 0 instead of a + (e.g., 091... becomes +91...).
+
+It correctly identifies 4-digit internal extensions and categorizes them as "Internal" without assigning a country code.

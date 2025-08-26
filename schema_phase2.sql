@@ -117,3 +117,25 @@ CREATE TABLE fact_agent_legs (
     FOREIGN KEY (agent_key) REFERENCES dim_users(user_key),
     FOREIGN KEY (disposition_key) REFERENCES dim_call_disposition(disposition_key)
 );
+
+
+/* -- This script updates the schema to support nested subdispositions and follow-up notes.
+-- Run these commands on your 'allcdr' database.
+*/
+
+-- 1. Add a column to the fact table for the notes
+ALTER TABLE fact_calls
+ADD COLUMN follow_up_notes TEXT;
+
+-- 2. Rename the old subdisposition column to be the first level
+ALTER TABLE dim_call_disposition
+CHANGE COLUMN subdisposition subdisposition_1 VARCHAR(100);
+
+-- 3. Add a new column for the second level of subdisposition
+ALTER TABLE dim_call_disposition
+ADD COLUMN subdisposition_2 VARCHAR(100);
+
+-- 4. Update the unique key to include the new columns to maintain integrity
+ALTER TABLE dim_call_disposition
+DROP INDEX unique_disposition,
+ADD UNIQUE KEY unique_disposition (call_direction, hangup_cause, disposition, subdisposition_1, subdisposition_2);
