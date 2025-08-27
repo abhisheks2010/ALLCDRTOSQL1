@@ -7,3 +7,6 @@ venv/
 # Python cache files
 __pycache__/
 *.pyc
+
+# Database data files (from Docker volume)
+mysql-data/

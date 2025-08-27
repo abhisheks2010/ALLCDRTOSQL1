@@ -1,0 +1,33 @@
+# This file defines the services, networks, and volumes for our application.
+version: '3.8'
+
+services:
+  # Define the MySQL database service
+  mysql_db:
+    image: mysql:8.0
+    container_name: allcdr_mysql_db
+    restart: unless-stopped
+    # Environment variables are used to configure the MySQL instance.
+    # We pull these from our .env file for security and flexibility.
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD} # For the root user
+      MYSQL_DATABASE: dummy_db # A dummy db is created, our init script creates the real ones
+      MYSQL_USER: ${DB_USER}       # The user our Python app will connect as
+      MYSQL_PASSWORD: ${DB_PASSWORD} # The password for our app's user
+    ports:
+      # Map port 3306 on the host to port 3306 in the container
+      - "3306:3306"
+    volumes:
+      # This persists the database data on your local machine in the 'mysql-data' folder
+      - mysql-data:/var/lib/mysql
+      # This runs our initialization scripts the first time the container is created
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# Define a named volume for data persistence
+volumes:
+  mysql-data:
