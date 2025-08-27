@@ -1,13 +1,13 @@
 Python ETL Pipeline for CDR API to MySQL Data Warehouse
-Objective
-This project provides a robust, two-phase ETL (Extract, Transform, Load) pipeline in Python. It is designed to fetch Call Detail Records (CDRs) from a REST API, load the raw data into a staging table, and then transform it into a structured star schema within a MySQL database, making it ready for analytics and business intelligence.
+📝 Objective
+This project provides a robust, multi-tenant, two-phase ETL (Extract, Transform, Load) pipeline in Python. It is designed to fetch Call Detail Records (CDRs) from multiple customer REST APIs, load the raw data into dedicated staging tables, and then transform it into a structured star schema within a MySQL database, making it ready for analytics and business intelligence.
 
-The pipeline is designed to be executed on a recurring schedule (e.g., hourly) and handles pagination, duplicate records, and complex data transformations automatically.
+The pipeline is designed to be executed on a recurring schedule (e.g., every 1-5 minutes) and handles API pagination, duplicate records, and complex data transformations automatically for each customer.
 
-Code Structure
+📂 Code Structure
 The project is organized into the following files:
 
-run_pipeline.py: (Main Script) The master script used to execute the entire ETL pipeline in the correct sequence.
+run_pipeline.py: (Main Script) The master script used to execute the entire ETL pipeline for a specific customer.
 
 cdr_ingestion.py: The script for Phase 1 (Extract), responsible for fetching raw data from the API and loading it into a staging table.
 
@@ -15,13 +15,11 @@ etl_phase2.py: The script for Phase 2 (Transform & Load), which processes the ra
 
 requirements.txt: A list of all the Python libraries required to run the pipeline.
 
-.env: A configuration file for storing all secrets and settings (API keys, database credentials).
+.env: A configuration file for storing all secrets and settings for all customers.
 
-schema.sql: The SQL script to create the initial raw data staging table.
+schema_phase2.sql: The complete SQL script to create all final dimension and fact tables for a single customer's data warehouse.
 
-schema_phase2.sql: The complete SQL script to create all final dimension and fact tables for the data warehouse.
-
-Getting Started
+🚀 Getting Started
 Follow these steps to set up and run the ETL pipeline.
 
 Prerequisites
@@ -32,29 +30,35 @@ Access to a MySQL server (local or remote).
 MySQL client tools (e.g., MySQL Workbench, mysql CLI).
 
 1. Database and User Setup
-Before running the scripts, you need to prepare the database.
+For data isolation, each customer must have their own separate database.
 
 Connect to your MySQL server as an administrator (root).
 
-Create the database:
+Create a database for each customer. For example:
 
 SQL
 
-CREATE DATABASE your_db_name;
+CREATE DATABASE allcdr_shams;
+CREATE DATABASE allcdr_spc;
 Create a dedicated user for the script to enhance security:
 
 SQL
 
 CREATE USER 'your_db_user'@'localhost' IDENTIFIED BY 'your_db_password';
-GRANT ALL PRIVILEGES ON your_db_name.* TO 'your_db_user'@'localhost';
+-- Grant privileges for both databases
+GRANT ALL PRIVILEGES ON allcdr_shams.* TO 'your_db_user'@'localhost';
+GRANT ALL PRIVILEGES ON allcdr_spc.* TO 'your_db_user'@'localhost';
 FLUSH PRIVILEGES;
-Run the contents of the schema_phase2.sql file to create all the necessary tables (cdr_raw_data, fact_calls, and all dim_ tables) inside your new database. Make sure to add USE your_db_name; at the top of the script before running it.
+For each new database, run the contents of the schema_phase2.sql file to create all the necessary tables. Make sure to change the USE statement at the top of the script for each customer before running it (e.g., USE allcdr_shams; for the first run, then USE allcdr_spc; for the second).
 
 2. Installation
-Clone the repository or download the project files.
+Clone the repository and switch to the correct branch:
 
-Navigate to the project's root directory in your terminal.
+Bash
 
+git clone https://github.com/abhisheks2010/ALLCDRTOSQL1.git
+cd ALLCDRTOSQL1
+git checkout multiCustomer
 Create and activate a Python virtual environment:
 
 Bash
@@ -75,27 +79,31 @@ pip install -r requirements.txt
 3. Configuration
 Create a copy of the .env.example file and rename it to .env.
 
-Open the new .env file and fill in your credentials:
+Open the new .env file and fill in the credentials for all your customers, using a unique prefix for each one.
 
 Ini, TOML
 
-# .env
+# .env - Multi-Customer Configuration
 
-# API Credentials
-API_JWT_TOKEN="your_jwt_token_here"
-API_ACCOUNT_ID="your_account_id_here"
+# --- Customer 1: SHAMS Configuration ---
+SHAMS_API_BASE_URL="https://uc.ira-shams-sj.ucprem.voicemeetme.com:9443/api/v2/reports/cdrs/all"
+SHAMS_API_JWT_TOKEN="your_shams_jwt_token_here"
+SHAMS_API_ACCOUNT_ID="your_shams_account_id_here"
+SHAMS_DB_NAME="allcdr_shams"
 
-# Scheduling Configuration
-FETCH_INTERVAL_MINUTES=60
+# --- Customer 2: SPC Configuration ---
+SPC_API_BASE_URL="https://ira-spc-sj.ucprem.voicemeetme.com:9443/api/v2/reports/cdrs/all"
+SPC_API_JWT_TOKEN="your_spc_jwt_token_here"
+SPC_API_ACCOUNT_ID="your_spc_account_id_here"
+SPC_DB_NAME="allcdr_spc"
 
-# MySQL Database Credentials
+# --- Common Configuration ---
+FETCH_INTERVAL_MINUTES=5
 DB_HOST="localhost"
 DB_USER="your_db_user"
 DB_PASSWORD="your_db_password"
-DB_NAME="your_db_name"
-
-How to Run the Pipeline
-To run the entire ETL process, execute the main pipeline script. This will run Phase 1 first, followed immediately by Phase 2.
+▶️ How to Run the Pipeline
+To run the entire ETL process, you must now provide the customer's name as a command-line argument. This name should match the prefix used in the .env file (case-insensitive).
 
 Make sure your virtual environment is activated.
 
@@ -103,46 +111,43 @@ Execute the run_pipeline.py script from your terminal:
 
 Bash
 
-python run_pipeline.py
-The script will print detailed log messages to the console, showing the progress of both phases, the number of records ingested and transformed, and any warnings or errors that occur.
+# To run the pipeline for the SHAMS customer
+python run_pipeline.py shams
 
-Scheduling the Pipeline
-For automation, you should schedule the run_pipeline.py script to run at your desired interval (e.g., every hour).
+# To run the pipeline for the SPC customer
+python run_pipeline.py spc
+⚙️ Scheduling the Pipeline
+For automation, you must create a separate scheduled task for each customer.
 
 Scheduling with Cron (Linux/macOS)
 Open your crontab file for editing: crontab -e
 
-Add the following line, making sure to use the absolute paths to your project and virtual environment. This example runs the script at the top of every hour.
+Add a line for each customer. This example runs the pipeline every 5 minutes for both customers.
 
 Code snippet
 
-# Run the full CDR ETL pipeline every hour
-0 * * * * /path/to/your/project/venv/bin/python /path/to/your/project/run_pipeline.py
+# Run the SHAMS CDR ETL pipeline every 5 minutes
+*/5 * * * * /path/to/project/venv/bin/python /path/to/project/run_pipeline.py shams
+
+# Run the SPC CDR ETL pipeline every 5 minutes
+*/5 * * * * /path/to/project/venv/bin/python /path/to/project/run_pipeline.py spc
 Scheduling with Windows Task Scheduler
-Open Task Scheduler.
+Open Task Scheduler and create a separate task for each customer.
 
-Click Create Basic Task... in the "Actions" pane.
+The Program/script and Start in fields will be the same for each task.
 
-Name: Give it a clear name like "Hourly CDR ETL Pipeline".
+The Add arguments (optional) field is where you specify the customer:
 
-Trigger: Select "Daily" and set it to repeat every 1 hour.
+SHAMS Task Arguments: run_pipeline.py shams
 
-Action: Select "Start a program".
-
-Program/script: Provide the full path to the python.exe executable inside your virtual environment (e.g., C:\path\to\your\project\venv\Scripts\python.exe).
-
-Add arguments (optional): Enter the name of the master script: run_pipeline.py.
-
-Start in (optional): Provide the full path to your project's root folder (e.g., C:\path\to\your\project).
-
-Review the settings and click Finish.
+SPC Task Arguments: run_pipeline.py spc
 
 Data Handling and Business Logic
 The pipeline includes several key features to ensure data quality and integrity:
 
-Duplicate Handling: Resilience against duplicate data is achieved at multiple levels. The cdr_raw_data staging table and the final fact_calls table both have a UNIQUE index on the msg_id column. Additionally, the ingestion script uses an INSERT IGNORE command, which instructs MySQL to gracefully skip any record whose msg_id already exists.
+Duplicate Handling: Resilience against duplicate data is achieved at multiple levels. The cdr_raw_data staging table and the final fact_calls table both have a UNIQUE index on the msg_id column. Additionally, the ingestion script uses an INSERT IGNORE command.
 
-Nested JSON Parsing: The ETL script is designed to parse complex, nested JSON objects within the raw CDR data. It specifically extracts detailed agent disposition information from the fonoUC object, including:
+Nested JSON Parsing: The ETL script is designed to parse complex, nested JSON objects. It specifically extracts detailed agent disposition information from the fonoUC object, including:
 
 Follow-up Notes: Captures manual notes left by agents.
 
@@ -154,6 +159,6 @@ It correctly identifies and processes standard international numbers (e.g., +971
 
 It handles local UAE numbers by defaulting to the "AE" region.
 
-It corrects malformed international numbers that start with a 0 instead of a + (e.g., 091... becomes +91...).
+It corrects malformed international numbers that start with a 0 instead of a +.
 
-It correctly identifies 4-digit internal extensions and categorizes them as "Internal" without assigning a country code.
+It correctly identifies 4-digit internal extensions and categorizes them as "Internal".
