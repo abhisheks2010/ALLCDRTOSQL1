@@ -1,6 +1,5 @@
 # cdr_ingestion.py
 
-import os
 import json
 import logging
 import requests
@@ -8,44 +7,39 @@ from datetime import datetime, timedelta, timezone
 
 import mysql.connector
 from mysql.connector import errorcode
-from dotenv import load_dotenv
 
-# --- Configuration & Setup ---
-load_dotenv()
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Note: All os.getenv calls have been moved to the orchestrator (run_pipeline.py)
+# This script now receives its configuration as a parameter.
 
-API_BASE_URL = "https://uc.ira-shams-sj.ucprem.voicemeetme.com:9443/api/v2/reports/cdrs/all"
-API_JWT_TOKEN = os.getenv("API_JWT_TOKEN")
-API_ACCOUNT_ID = os.getenv("API_ACCOUNT_ID")
-API_PAGE_SIZE = 2000
-DB_HOST = os.getenv("DB_HOST")
-DB_USER = os.getenv("DB_USER")
-DB_PASSWORD = os.getenv("DB_PASSWORD")
-DB_NAME = os.getenv("DB_NAME")
-FETCH_INTERVAL_MINUTES = int(os.getenv("FETCH_INTERVAL_MINUTES", 60))
-
-def validate_config():
-    """Checks if all required environment variables are set."""
-    required_vars = ["API_JWT_TOKEN", "API_ACCOUNT_ID", "DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME"]
-    missing_vars = [var for var in required_vars if not os.getenv(var)]
-    if missing_vars:
-        msg = f"Missing required environment variables: {', '.join(missing_vars)}"
-        logging.error(msg)
-        raise ValueError(msg)
-    logging.info("Configuration validated successfully.")
-
-def main():
+def main(config):
     """
-    Fetches CDRs and ingests them, automatically skipping duplicates based on msg_id.
-    """
-    validate_config()
+    Fetches CDRs and ingests them using the provided customer configuration.
+    This function is called by the main run_pipeline.py script.
 
+    Args:
+        config (dict): A dictionary containing all necessary configuration
+                       parameters for a specific customer.
+    """
+    # --- 1. Load Configuration ---
+    # All variables are now read from the config object passed into the function.
+    customer_name = config['name']
+    api_base_url = config['api_base_url']
+    api_jwt_token = config['api_jwt_token']
+    api_account_id = config['api_account_id']
+    db_name = config['db_name']
+    db_host = config['db_host']
+    db_user = config['db_user']
+    db_password = config['db_password']
+    fetch_interval_minutes = config['fetch_interval_minutes']
+    api_page_size = 2000 # This can also be moved to config if it varies by customer
+
+    logging.info(f"PHASE 1 (Ingestion) for '{customer_name.upper()}': Fetching data for the last {fetch_interval_minutes} minutes.")
+
+    # --- 2. Set Up API and Database Connections ---
     end_time = datetime.now(timezone.utc)
-    start_time = end_time - timedelta(minutes=FETCH_INTERVAL_MINUTES)
+    start_time = end_time - timedelta(minutes=fetch_interval_minutes)
     end_date_unix = int(end_time.timestamp())
     start_date_unix = int(start_time.timestamp())
-
-    logging.info(f"Fetching CDR data for the last {FETCH_INTERVAL_MINUTES} minutes.")
 
     db_connection = None
     start_key = None
@@ -54,24 +48,25 @@ def main():
     is_first_page = True
 
     try:
-        logging.info(f"Connecting to MySQL database '{DB_NAME}'...")
+        logging.info(f"Connecting to MySQL database '{db_name}'...")
         db_connection = mysql.connector.connect(
-            host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
+            host=db_host, user=db_user, password=db_password, database=db_name
         )
         cursor = db_connection.cursor()
         logging.info("Database connection successful.")
 
+        # --- 3. Paginate Through API Results ---
         while True:
-            params = {'startDate': start_date_unix, 'endDate': end_date_unix, 'pageSize': API_PAGE_SIZE}
+            params = {'startDate': start_date_unix, 'endDate': end_date_unix, 'pageSize': api_page_size}
             if start_key:
                 params['start_key'] = start_key
-            headers = {'Authorization': f'Bearer {API_JWT_TOKEN}', 'x-account-id': API_ACCOUNT_ID}
+            headers = {'Authorization': f'Bearer {api_jwt_token}', 'x-account-id': api_account_id}
 
-            req = requests.Request('GET', API_BASE_URL, params=params)
+            req = requests.Request('GET', api_base_url, params=params)
             prepared_req = req.prepare()
             logging.info(f"Executing request to URL: {prepared_req.url}")
 
-            response = requests.get(API_BASE_URL, headers=headers, params=params, timeout=30)
+            response = requests.get(api_base_url, headers=headers, params=params, timeout=30)
             response.raise_for_status()
 
             data = response.json()
@@ -112,15 +107,15 @@ def main():
 
     except requests.exceptions.RequestException as e:
         logging.error(f"API request failed: {e}")
-        raise # Re-raise the exception to be caught by the pipeline runner
+        raise
     except mysql.connector.Error as err:
         logging.error(f"Database error occurred: {err}")
         if db_connection:
             db_connection.rollback()
-        raise # Re-raise
+        raise
     except Exception as e:
         logging.error(f"An unexpected error occurred: {e}")
-        raise # Re-raise
+        raise
     finally:
         if db_connection and db_connection.is_connected():
             cursor.close()
@@ -132,6 +127,25 @@ def main():
         logging.info(f"Duplicate records skipped: {duplicates_skipped}")
 
 
+# This block is for standalone testing only. The script is intended to be called from run_pipeline.py
 if __name__ == "__main__":
-    logging.info("Starting CDR ingestion script with duplicate handling...")
-    main()
+    logging.warning("This script is intended to be run from run_pipeline.py")
+    logging.warning("To test, ensure your .env file has SHAMS_... variables set.")
+    
+    from dotenv import load_dotenv
+    import os
+    load_dotenv()
+    
+    # Example of creating a config for testing
+    test_config = {
+        "name": "shams_test",
+        "api_base_url": os.getenv("SHAMS_API_BASE_URL"),
+        "api_jwt_token": os.getenv("SHAMS_API_JWT_TOKEN"),
+        "api_account_id": os.getenv("SHAMS_API_ACCOUNT_ID"),
+        "db_name": os.getenv("SHAMS_DB_NAME"),
+        "db_host": os.getenv("DB_HOST"),
+        "db_user": os.getenv("DB_USER"),
+        "db_password": os.getenv("DB_PASSWORD"),
+        "fetch_interval_minutes": int(os.getenv("FETCH_INTERVAL_MINUTES", 5))
+    }
+    main(test_config)

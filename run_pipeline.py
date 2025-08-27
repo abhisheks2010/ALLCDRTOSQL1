@@ -1,42 +1,71 @@
 # run_pipeline.py
 
+import os
+import sys
 import logging
+from dotenv import load_dotenv
 
 # Import the main functions from your existing scripts
 from cdr_ingestion import main as run_ingestion_phase
 from etl_phase2 import main as run_transform_phase
 
-# Configure basic logging for the pipeline runner
+# --- Configuration & Setup ---
+load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def run_full_etl_pipeline():
+def get_customer_config(customer_name):
     """
-    Executes the complete ETL pipeline sequentially.
-    Phase 1: Ingests raw data from the API.
-    Phase 2: Transforms raw data into the star schema.
+    Loads configuration for a specific customer from environment variables.
     """
+    prefix = customer_name.upper()
+    config = {
+        "name": customer_name,
+        "api_base_url": os.getenv(f"{prefix}_API_BASE_URL"),
+        "api_jwt_token": os.getenv(f"{prefix}_API_JWT_TOKEN"),
+        "api_account_id": os.getenv(f"{prefix}_API_ACCOUNT_ID"),
+        "db_name": os.getenv(f"{prefix}_DB_NAME"),
+        "db_host": os.getenv("DB_HOST"),
+        "db_user": os.getenv("DB_USER"),
+        "db_password": os.getenv("DB_PASSWORD"),
+        "fetch_interval_minutes": int(os.getenv("FETCH_INTERVAL_MINUTES", 60))
+    }
+    
+    # Validate that all required config values were found
+    required_keys = ["api_base_url", "api_jwt_token", "api_account_id", "db_name", "db_host", "db_user"]
+    if not all(config.get(key) for key in required_keys):
+        logging.error(f"Missing one or more required configuration variables for customer: {customer_name}")
+        sys.exit(1) # Exit with an error code
+        
+    return config
+
+def run_full_etl_pipeline(config):
+    """
+    Executes the complete ETL pipeline sequentially using the provided configuration.
+    """
+    customer = config['name']
     try:
-        logging.info("========================================")
-        logging.info(" STARTING ETL PIPELINE RUN")
-        logging.info("========================================")
+        logging.info("="*40)
+        logging.info(f"🚀 STARTING ETL PIPELINE RUN FOR CUSTOMER: {customer.upper()}")
+        logging.info("="*40)
 
-        # --- Phase 1: Ingestion ---
-        logging.info("Executing Phase 1: CDR Ingestion...")
-        run_ingestion_phase()
-        logging.info(" Phase 1: CDR Ingestion completed successfully.")
+        # Pass the config object to each phase
+        run_ingestion_phase(config)
+        run_transform_phase(config)
 
-        # --- Phase 2: Transformation ---
-        logging.info("Executing Phase 2: Data Transformation (ETL)...")
-        run_transform_phase()
-        logging.info(" Phase 2: Data Transformation completed successfully.")
-
-        logging.info("========================================")
-        logging.info(" ETL PIPELINE RUN FINISHED")
-        logging.info("========================================")
+        logging.info("="*40)
+        logging.info(f"🎉 ETL PIPELINE RUN FOR {customer.upper()} FINISHED SUCCESSFULLY")
+        logging.info("="*40)
 
     except Exception as e:
-        logging.error(f" An error occurred during the ETL pipeline run: {e}", exc_info=True)
-        # Depending on requirements, you could add notifications here (e.g., send an email)
+        logging.error(f"❌ An error occurred during the ETL pipeline run for {customer.upper()}: {e}", exc_info=True)
 
 if __name__ == "__main__":
-    run_full_etl_pipeline()
+    # Expect a customer name ('shams' or 'spc') as a command-line argument
+    if len(sys.argv) < 2:
+        logging.error("Usage: python run_pipeline.py <customer_name>")
+        sys.exit(1)
+        
+    customer_arg = sys.argv[1].lower()
+    customer_config = get_customer_config(customer_arg)
+    
+    run_full_etl_pipeline(customer_config)
