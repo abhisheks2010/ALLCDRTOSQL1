@@ -16,7 +16,7 @@ services:
       MYSQL_PASSWORD: ${DB_PASSWORD} # The password for our app's user
     ports:
       # Map port 3306 on the host to port 3306 in the container
-      - "3306:3306"
+      - "3308:3306"
     volumes:
       # This persists the database data on your local machine in the 'mysql-data' folder
       - mysql-data:/var/lib/mysql
