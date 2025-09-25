@@ -31,13 +31,18 @@ def main(config):
     db_user = config['db_user']
     db_password = config['db_password']
     fetch_interval_minutes = config['fetch_interval_minutes']
+    initial_load_days = config.get('initial_load_days')
     api_page_size = 2000 # This can also be moved to config if it varies by customer
 
     logging.info(f"PHASE 1 (Ingestion) for '{customer_name.upper()}': Fetching data for the last {fetch_interval_minutes} minutes.")
 
     # --- 2. Set Up API and Database Connections ---
     end_time = datetime.now(timezone.utc)
-    start_time = end_time - timedelta(minutes=fetch_interval_minutes)
+    if initial_load_days:
+        start_time = end_time - timedelta(days=int(initial_load_days))
+        logging.info(f"Initial load mode: Fetching data for the last {initial_load_days} days.")
+    else:
+        start_time = end_time - timedelta(minutes=fetch_interval_minutes)
     end_date_unix = int(end_time.timestamp())
     start_date_unix = int(start_time.timestamp())
 

@@ -177,7 +177,8 @@ def get_user_key(cursor, number, name, is_agent_update=False):
             parsed_number = phonenumbers.parse(number_to_parse, "AE")
             country_code = parsed_number.country_code
         except phonenumbers.phonenumberutil.NumberParseException:
-            logging.warning(f"Could not parse phone number: {number}")
+            # Non-standard phone numbers (e.g., context variables) are handled gracefully
+            pass
 
     return get_or_create_key(cursor, "users", {"user_number": number}, {
         "user_name": name, "country_code": country_code, "country_name": country_name
