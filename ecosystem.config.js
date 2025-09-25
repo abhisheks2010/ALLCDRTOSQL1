@@ -7,9 +7,9 @@ module.exports = {
     env: {
       NODE_ENV: 'production'
     },
-    cron_restart: '*/5 * * * *',  // Run every 5 minutes
+    // Remove cron_restart and let the script handle its own scheduling
     autorestart: true,
-    // restart_delay: 300000,  // Restart after 5 minutes (300 seconds)
+    restart_delay: 5000,  // 5 second delay before restart if process crashes
     max_memory_restart: '1G',
     log_file: '/home/multycomm/allcdrpipeline/logs/etl.log',  // Linux log path
     out_file: '/home/multycomm/allcdrpipeline/logs/etl-out.log',

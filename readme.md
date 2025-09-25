@@ -20,6 +20,7 @@ This project provides a robust, multi-tenant, two-phase ETL (Extract, Transform,
 ## 🚀 Getting Started
 
 ### Prerequisites
+- **OS**: Debian Linux (production deployment)
 - Python 3.8 or newer
 - MySQL 8.0 or newer (local installation)
 - Node.js and npm (for PM2 deployment)
@@ -35,7 +36,8 @@ git checkout dockerizeDB
 python -m venv venv
 venv\Scripts\activate  # Windows
 
-# For production Linux deployment, ensure python3 is available
+# For production Debian deployment, ensure python3 is available
+# and all required packages are installed system-wide or in venv
 # Create logs directory
 mkdir -p /home/multycomm/allcdrpipeline/logs
 
@@ -100,19 +102,28 @@ pm2 start ecosystem.config.js
 # Check status
 pm2 status
 
-# View logs
+# View real-time logs
 pm2 logs allcdr-etl-scheduler
 
 # Stop scheduler
 pm2 stop allcdr-etl-scheduler
+
+# Restart scheduler
+pm2 restart allcdr-etl-scheduler
 ```
 
+### How It Works
+- PM2 starts the `run_all_customers.py` script and keeps it running continuously
+- The script runs in an infinite loop, executing ETL for all customers every 5 minutes
+- Each complete cycle takes ~15-20 seconds, then sleeps for 5 minutes
+- PM2 monitors the process and restarts it if it crashes
+
 ### PM2 Configuration
-- **Schedule**: Every 5 minutes (via cron_restart)
-- **Execution**: Sequential processing of all customers
-- **Load Management**: 5-second delays between customers
+- **Process Management**: PM2 keeps the ETL scheduler running continuously on Debian Linux
+- **Internal Scheduling**: Script runs ETL cycles every 5 minutes internally
+- **Sequential Processing**: Processes all customers with 5-second delays between them
 - **Memory Limit**: 1GB with auto-restart
-- **Logging**: Detailed logs with record counts, API responses, and processing metrics
+- **Logging**: Detailed logs with record counts and processing metrics
 
 ### Manual Testing
 ```bash
@@ -161,15 +172,16 @@ pm2 logs allcdr-etl-scheduler
 ## 📈 Monitoring & Troubleshooting
 
 ### Current System Status
-- **Active Customers**: Meydan, SPC, Shams (ETL running successfully every 5 minutes)
+- **Active Customers**: Meydan, SPC, Shams (ETL running successfully every 5 minutes via PM2)
 - **Pending Customer**: DubaiSouth (authentication issues - requires credential verification)
-- **Schedule**: Every 5 minutes via PM2 cron
+- **Schedule**: Every 5 minutes via PM2 cron (production Linux environment)
 - **Data Volume**: Incremental loads with detailed logging
 - **Database**: Local MySQL with separate databases per customer
 - **Monitoring**: Comprehensive logs showing record counts and processing details
+- **Status**: ✅ Production deployment successful
 
 ### Log Files
-- PM2 logs: `../logs/etl.log` (detailed ETL execution with record counts)
+- PM2 logs: `/home/multycomm/allcdrpipeline/logs/etl.log` (detailed ETL execution with record counts)
 - Application logs: Console output with timestamps
 - Database errors: Check MySQL error logs
 
