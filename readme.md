@@ -1,134 +1,202 @@
-Of course. Here is the final, comprehensive readme.md file.
+# Python ETL Pipeline for CDR API to MySQL Data Warehouse
 
-This version includes all the latest updates, including the multi-customer architecture, Dockerized database setup, and advanced data handling logic. It serves as a complete user manual for the project.
+## 📝 Objective
+This project provides a robust, multi-tenant, two-phase ETL (Extract, Transform, Load) pipeline in Python. It fet## 👤 Author
 
-readme.md
-Python ETL Pipeline for CDR API to MySQL Data Warehouse
-📝 Objective
-This project provides a robust, multi-tenant, two-phase ETL (Extract, Transform, Load) pipeline in Python. It is designed to fetch Call Detail Records (CDRs) from multiple customer REST APIs, load the raw data into a dedicated staging table, and then transform it into a structured star schema within a MySQL database, making it ready for analytics and business intelligence.
+**ABHISHEK SHARMA**  
+📧 abhi.s.manc@gmail.com Call Detail Records (CDRs) from multiple customer REST APIs, loads raw data into staging tables, and transforms it into a structured star schema within MySQL databases, ready for analytics and business intelligence.
 
-The entire environment, including the database, is containerized with Docker for easy setup and consistent deployment.
+## 📂 Code Structure
+- `run_pipeline.py`: Main script to execute ETL pipeline for a specific customer
+- `run_all_customers.py`: Automated scheduler for all customers
+- `cdr_ingestion.py`: Phase 1 (Extract) - fetches raw data from APIs
+- `etl_phase2.py`: Phase 2 (Transform & Load) - populates star schema
+- `requirements.txt`: Python dependencies
+- `.env`: Configuration for all customers and settings
+- `schema_phase2.sql`: SQL script for dimension and fact tables
+- `ecosystem.config.js`: PM2 configuration for production deployment
+- `init-scripts/`: SQL initialization scripts
 
-📂 Code Structure
-The project is organized into the following files:
+## 🚀 Getting Started
 
-run_pipeline.py: (Main Script) The master script used to execute the entire ETL pipeline for a specific customer.
+### Prerequisites
+- Python 3.8 or newer
+- MySQL 8.0 or newer (local installation)
+- Node.js and npm (for PM2 deployment)
 
-docker-compose.yml: Defines and configures the MySQL database service.
-
-cdr_ingestion.py: The script for Phase 1 (Extract), responsible for fetching raw data from the API.
-
-etl_phase2.py: The script for Phase 2 (Transform & Load), which populates the final star schema.
-
-requirements.txt: A list of all the Python libraries required.
-
-.env: A configuration file for storing all secrets and settings for all customers.
-
-init-scripts/: A folder containing SQL scripts that are run once to initialize the databases.
-
-schema_phase2.sql: The complete SQL script to create all final dimension and fact tables.
-
-🚀 Getting Started
-Follow these steps to set up and run the entire environment.
-
-Prerequisites
-Docker and Docker Compose must be installed and running.
-
-Python 3.8 or newer.
-
-1. Configuration
-Clone the repository and switch to the correct branch:
-
-Bash
-
+### 1. Environment Setup
+```bash
+# Clone repository
 git clone https://github.com/abhisheks2010/ALLCDRTOSQL1.git
 cd ALLCDRTOSQL1
-git checkout multiCustomer
-Create a copy of the .env.example file and rename it to .env.
+git checkout dockerizeDB
 
-Open the new .env file and fill in the credentials for all your customers, using a unique prefix for each one. Crucially, set DB_HOST to the service name from docker-compose.yml (mysql_db).
+# Create virtual environment
+python -m venv venv
+venv\Scripts\activate  # Windows
 
-Ini, TOML
-
-# .env - Multi-Customer Configuration
-
-# --- Customer 1: SHAMS Configuration ---
-SHAMS_API_BASE_URL="..."
-SHAMS_API_JWT_TOKEN="..."
-SHAMS_API_ACCOUNT_ID="..."
-SHAMS_DB_NAME="allcdr_shams"
-
-# --- Customer 2: SPC Configuration ---
-SPC_API_BASE_URL="..."
-SPC_API_JWT_TOKEN="..."
-SPC_API_ACCOUNT_ID="..."
-SPC_DB_NAME="allcdr_spc"
-
-# --- Common & Docker Configuration ---
-FETCH_INTERVAL_MINUTES=5
-DB_HOST="mysql_db"  # <-- IMPORTANT: Use the Docker service name
-DB_USER="your_db_user"
-DB_PASSWORD="your_strong_password"
-2. Database Setup with Docker
-Start the Database Container: From the project's root directory, run:
-
-Bash
-
-docker-compose up -d
-The first time you run this, Docker will download MySQL, create the databases (allcdr_shams, allcdr_spc), and set up the user as defined in init-scripts/01-init.sql.
-
-Create the Tables (One-Time Step): After the container is running, connect to the database using any SQL client (e.g., MySQL Workbench, DBeaver) with the credentials from your .env file (host: localhost, port: 3306).
-
-For each customer database, run the entire schema_phase2.sql script to create the tables. Remember to set the correct USE statement at the top of the script for each run (e.g., USE allcdr_shams;).
-
-3. Application Setup
-Create and activate a Python virtual environment:
-
-Bash
-
-# Create the environment
-python3 -m venv venv
-
-# Activate on Windows
-.\venv\Scripts\activate
-
-# Activate on Linux/macOS
-source venv/bin/activate
-Install the required libraries:
-
-Bash
-
+# Install dependencies
 pip install -r requirements.txt
-▶️ How to Run the Pipeline
-To run the entire ETL process, you must now provide the customer's name as a command-line argument. This name should match the prefix used in the .env file (case-insensitive).
+```
 
-Bash
+### 2. Database Setup
+```bash
+# Install MySQL locally and create databases
+mysql -u root -p
+CREATE DATABASE allcdr_meydan;
+CREATE DATABASE allcdr_spc;
+CREATE DATABASE allcdr_shams;
+CREATE DATABASE allcdr_dubaisouth;
+exit
 
-# To run the pipeline for the SHAMS customer
-python run_pipeline.py shams
+# Run schema for each database
+mysql -u root -p allcdr_meydan < schema_phase2.sql
+mysql -u root -p allcdr_spc < schema_phase2.sql
+mysql -u root -p allcdr_shams < schema_phase2.sql
+mysql -u root -p allcdr_dubaisouth < schema_phase2.sql
+```
 
-# To run the pipeline for the SPC customer
+### 3. Configuration
+Copy `.env` and configure credentials for each customer:
+```bash
+cp .env.example .env
+# Edit .env with your API credentials and database settings
+```
+
+### 4. Initial Load (One-time)
+```bash
+# Set initial load days in .env
+INITIAL_LOAD_DAYS=30
+
+# Run for each customer
+python run_pipeline.py meydan
 python run_pipeline.py spc
-⚙️ Scheduling the Pipeline
-For automation, you must create a separate scheduled task for each customer.
+python run_pipeline.py shams
+# dubaisouth may fail due to auth issues
 
-Cron (Linux/macOS) Example:
-This example runs the pipeline every 5 minutes for both customers.
+# Comment out INITIAL_LOAD_DAYS after initial load
+```
 
-Code snippet
+## 🔄 Automated Scheduling with PM2
 
-*/5 * * * * /path/to/project/venv/bin/python /path/to/project/run_pipeline.py shams
-*/5 * * * * /path/to/project/venv/bin/python /path/to/project/run_pipeline.py spc
-Windows Task Scheduler Example:
-Create two separate tasks. The Program/script and Start in fields will be the same, but the Add arguments (optional) field will be different:
+### Install PM2
+```bash
+npm install -g pm2
+```
 
-SHAMS Task Arguments: run_pipeline.py shams
+### Start Production Scheduler
+```bash
+# Start the automated ETL scheduler
+pm2 start ecosystem.config.js
 
-SPC Task Arguments: run_pipeline.py spc
+# Check status
+pm2 status
 
-Data Handling and Business Logic
-Duplicate Handling: UNIQUE keys on msg_id and INSERT IGNORE commands prevent duplicate records.
+# View logs
+pm2 logs allcdr-etl-scheduler
 
-Nested JSON Parsing: The ETL script is designed to parse complex, nested JSON objects from the fonoUC object, including Follow-up Notes and up to two levels of Subdispositions.
+# Stop scheduler
+pm2 stop allcdr-etl-scheduler
+```
 
-Robust Phone Number Parsing: The script contains intelligent logic to handle a variety of phone number formats, including standard international, local UAE numbers, malformed numbers, and 4-digit internal extensions.
+### PM2 Configuration
+- **Schedule**: Every 5 minutes (via cron_restart)
+- **Execution**: Sequential processing of all customers
+- **Load Management**: 5-second delays between customers
+- **Memory Limit**: 1GB with auto-restart
+- **Logging**: Detailed logs with record counts, API responses, and processing metrics
+
+### Manual Testing
+```bash
+# Test all customers manually
+python run_all_customers.py
+
+# Test single customer
+python run_pipeline.py meydan
+
+# Monitor PM2 logs
+pm2 logs allcdr-etl-scheduler
+```
+
+## 📊 Data Architecture
+
+### Star Schema Design
+- **fact_calls**: Central fact table with call metrics
+- **fact_agent_legs**: Agent-specific call segments
+- **Dimensions**: date, time_of_day, users, call_disposition, system, campaigns, queues
+
+### Data Flow
+1. **Extract**: API calls fetch CDRs with JWT authentication
+2. **Load**: Raw JSON stored in `cdr_raw_data` staging table
+3. **Transform**: Parsed into normalized star schema
+4. **Validate**: Duplicate prevention and data integrity checks
+
+## 🔧 API Integration Details
+
+### Authentication
+- OAuth 2.0 flow with multiple endpoint fallbacks
+- Automatic token refresh per customer
+- Tenant/domain-based login
+
+### Data Handling
+- **Duplicate Prevention**: `msg_id` uniqueness
+- **Incremental Loads**: Timestamp-based fetching
+- **Error Recovery**: Failed records marked but don't stop pipeline
+- **Nested JSON**: Complex fonoUC object parsing
+- **API Pagination**: Automatic handling of multiple pages using `new_start_key`
+
+### Phone Number Processing
+- International format parsing (libphonenumber)
+- Internal extension handling
+- Country code extraction
+
+## 📈 Monitoring & Troubleshooting
+
+### Current System Status
+- **Active Customers**: Meydan, SPC, Shams (ETL running successfully every 5 minutes)
+- **Pending Customer**: DubaiSouth (authentication issues - requires credential verification)
+- **Schedule**: Every 5 minutes via PM2 cron
+- **Data Volume**: Incremental loads with detailed logging
+- **Database**: Local MySQL with separate databases per customer
+- **Monitoring**: Comprehensive logs showing record counts and processing details
+
+### Log Files
+- PM2 logs: `../logs/etl.log` (detailed ETL execution with record counts)
+- Application logs: Console output with timestamps
+- Database errors: Check MySQL error logs
+
+### Log Details Captured
+- ✅ API authentication success/failure
+- ✅ Records fetched, inserted, and duplicates skipped
+- ✅ Processing batch completion (X/Y records)
+- ✅ Pagination handling (multiple API pages)
+- ✅ Phase completion status
+- ❌ Authentication errors and failures
+
+### Common Issues
+- **Auth Failures**: Verify credentials and endpoints
+- **Connection Errors**: Check network and database status
+- **Duplicate Data**: Normal for overlapping time windows
+- **Memory Issues**: PM2 auto-restarts on high usage
+
+### Performance Tuning
+- Adjust `FETCH_INTERVAL_MINUTES` for data volume
+- Modify PM2 cron schedule based on business needs
+- Monitor database connection pool usage
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create feature branch
+3. Test changes thoroughly
+4. Update documentation
+5. Submit pull request
+
+## � Author
+
+**ABHISHEK SHARMA**  
+📧 abhishek@multycomm.com
+
+## �📄 License
+
+This project is proprietary software for MultyComm.
