@@ -65,7 +65,7 @@ cp .env.example .env
 
 ### 4. Initial Load (One-time)
 ```bash
-# Set initial load days in .env
+# Set initial load days in .env (max 30 days due to API limitations)
 INITIAL_LOAD_DAYS=30
 
 # Run for each customer
@@ -178,6 +178,7 @@ pm2 logs allcdr-etl-scheduler
 - **Connection Errors**: Check network and database status
 - **Duplicate Data**: Normal for overlapping time windows
 - **Memory Issues**: PM2 auto-restarts on high usage
+- **API Date Range Limit**: The CDR API only accepts date ranges up to 30 days. Set `INITIAL_LOAD_DAYS=30` maximum.
 
 ### Performance Tuning
 - Adjust `FETCH_INTERVAL_MINUTES` for data volume

@@ -62,6 +62,7 @@ def main(config):
 
         # --- 3. Paginate Through API Results ---
         while True:
+            # Use seconds for Unix timestamps (not milliseconds)
             params = {'startDate': start_date_unix, 'endDate': end_date_unix, 'pageSize': api_page_size}
             if start_key:
                 params['start_key'] = start_key
@@ -75,6 +76,7 @@ def main(config):
             response.raise_for_status()
 
             data = response.json()
+            
             records = data.get('cdrs', [])
 
             if not records and is_first_page:
