@@ -31,9 +31,13 @@ git clone https://github.com/abhisheks2010/ALLCDRTOSQL1.git
 cd ALLCDRTOSQL1
 git checkout dockerizeDB
 
-# Create virtual environment
+# Create virtual environment (development)
 python -m venv venv
 venv\Scripts\activate  # Windows
+
+# For production Linux deployment, ensure python3 is available
+# Create logs directory
+mkdir -p /home/multycomm/allcdrpipeline/logs
 
 # Install dependencies
 pip install -r requirements.txt
@@ -86,7 +90,11 @@ npm install -g pm2
 
 ### Start Production Scheduler
 ```bash
-# Start the automated ETL scheduler
+# Create logs directory if it doesn't exist
+mkdir -p /home/multycomm/allcdrpipeline/logs
+
+# Update ecosystem.config.js with correct production paths before starting
+# Edit interpreter, cwd, and log paths for your Linux environment
 pm2 start ecosystem.config.js
 
 # Check status
@@ -179,6 +187,7 @@ pm2 logs allcdr-etl-scheduler
 - **Duplicate Data**: Normal for overlapping time windows
 - **Memory Issues**: PM2 auto-restarts on high usage
 - **API Date Range Limit**: The CDR API only accepts date ranges up to 30 days. Set `INITIAL_LOAD_DAYS=30` maximum.
+- **PM2 Path Issues**: Update `ecosystem.config.js` with correct Linux paths in production (not Windows paths)
 
 ### Performance Tuning
 - Adjust `FETCH_INTERVAL_MINUTES` for data volume

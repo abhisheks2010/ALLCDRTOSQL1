@@ -2,8 +2,8 @@ module.exports = {
   apps: [{
     name: 'allcdr-etl-scheduler',
     script: 'run_all_customers.py',
-    interpreter: 'C:/Users/abhis/OneDrive/Documents/MULTYCOMM/ALLCDRTOSQL/venv/Scripts/python.exe',  // Update to your Python venv path
-    cwd: 'C:/Users/abhis/OneDrive/Documents/MULTYCOMM/ALLCDRTOSQL',  // Update to your project path
+    interpreter: 'python3',  // Use system python3 in production
+    cwd: '/home/multycomm/allcdrpipeline/ALLCDRTOSQL1',  // Linux production path
     env: {
       NODE_ENV: 'production'
     },
@@ -11,9 +11,9 @@ module.exports = {
     autorestart: true,
     // restart_delay: 300000,  // Restart after 5 minutes (300 seconds)
     max_memory_restart: '1G',
-    log_file: 'C:/Users/abhis/OneDrive/Documents/MULTYCOMM/logs/etl.log',  // Update log path
-    out_file: 'C:/Users/abhis/OneDrive/Documents/MULTYCOMM/logs/etl-out.log',
-    error_file: 'C:/Users/abhis/OneDrive/Documents/MULTYCOMM/logs/etl-error.log',
+    log_file: '/home/multycomm/allcdrpipeline/logs/etl.log',  // Linux log path
+    out_file: '/home/multycomm/allcdrpipeline/logs/etl-out.log',
+    error_file: '/home/multycomm/allcdrpipeline/logs/etl-error.log',
     time: true
   }]
 };
