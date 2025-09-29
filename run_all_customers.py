@@ -9,8 +9,8 @@ from datetime import datetime
 # --- Configuration & Setup ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-#CUSTOMERS = ['meydan', 'spc', 'shams', 'dubaisouth']
-CUSTOMERS = ['spc', 'shams']
+CUSTOMERS = ['meydan', 'spc', 'shams', 'dubaisouth']
+# CUSTOMERS = ['dubaisouth']
 
 def run_customer_pipeline(customer):
     """Run the ETL pipeline for a single customer."""

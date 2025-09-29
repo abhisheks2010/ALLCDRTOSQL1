@@ -137,6 +137,40 @@ python run_pipeline.py meydan
 pm2 logs allcdr-etl-scheduler
 ```
 
+## ⚙️ Automated Scheduling: PM2 & run_all_customers.py
+
+### PM2 Process Manager
+- **Configuration:** See `ecosystem.config.js` for production deployment.
+- **Script:** Runs `run_all_customers.py` using system `python3`.
+- **Working Directory:** Set to `/home/multycomm/allcdrpipeline/ALLCDRTOSQL1` (Linux production path).
+- **Autorestart:** Enabled; process will restart automatically on crash.
+- **Memory Limit:** 1GB (`max_memory_restart: '1G'`).
+- **Logging:**
+  - All logs written to `/home/multycomm/allcdrpipeline/logs/etl.log` (and out/error logs).
+  - Timestamps and process info included (`time: true`).
+- **No External Cron:** The script handles its own 5-minute scheduling loop; PM2 only manages process lifecycle.
+
+### `run_all_customers.py` Scheduler Logic
+- **Customer List:** Edit the `CUSTOMERS` list in the script to control which tenants are processed.
+- **Loop:**
+  - For each customer, runs `run_pipeline.py <customer>` as a subprocess.
+  - Waits 5 seconds between customers to reduce DB/API load.
+  - After all customers, sleeps for 5 minutes before next cycle.
+- **Logging:**
+  - Logs start/end of each ETL run, per-customer results, and errors.
+  - Captures and logs both stdout and stderr from each ETL subprocess.
+- **Error Handling:**
+  - If a customer ETL fails, logs error details but continues with next customer.
+  - If the main loop encounters an error, waits 60 seconds and retries.
+  - Graceful shutdown on Ctrl+C (KeyboardInterrupt).
+
+### How to Use in Production
+1. Edit `CUSTOMERS` in `run_all_customers.py` to match your tenants.
+2. Update `ecosystem.config.js` paths for your environment.
+3. Start with `pm2 start ecosystem.config.js`.
+4. Monitor with `pm2 logs allcdr-etl-scheduler`.
+5. The ETL will run for all customers every 5 minutes, with robust logging and auto-restart.
+
 ## 📊 Data Architecture
 
 ### Star Schema Design
@@ -169,42 +203,43 @@ pm2 logs allcdr-etl-scheduler
 - Internal extension handling
 - Country code extraction
 
-## 📈 Monitoring & Troubleshooting
+## 🗄️ Database Schema: Raw CDR Table
 
-### Current System Status
-- **Active Customers**: Meydan, SPC, Shams (ETL running successfully every 5 minutes via PM2)
-- **Pending Customer**: DubaiSouth (authentication issues - requires credential verification)
-- **Schedule**: Every 5 minutes via PM2 cron (production Linux environment)
-- **Data Volume**: Incremental loads with detailed logging
-- **Database**: Local MySQL with separate databases per customer
-- **Monitoring**: Comprehensive logs showing record counts and processing details
-- **Status**: ✅ Production deployment successful
+The initial staging table for raw CDRs is created as follows (see `schema.sql`):
 
-### Log Files
-- PM2 logs: `/home/multycomm/allcdrpipeline/logs/etl.log` (detailed ETL execution with record counts)
-- Application logs: Console output with timestamps
-- Database errors: Check MySQL error logs
+```sql
+CREATE DATABASE allcdr;
+USE allcdr;
 
-### Log Details Captured
-- ✅ API authentication success/failure
-- ✅ Records fetched, inserted, and duplicates skipped
-- ✅ Processing batch completion (X/Y records)
-- ✅ Pagination handling (multiple API pages)
-- ✅ Phase completion status
-- ❌ Authentication errors and failures
+CREATE TABLE cdr_raw_data (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    msg_id VARCHAR(255) UNIQUE,
+    record_data JSON,
+    ingestion_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+- If your MySQL version is older than 5.7.8, use `LONGTEXT` instead of `JSON` for `record_data`.
+- The ETL pipeline will automatically add and use the `msg_id` column for duplicate prevention.
 
-### Common Issues
-- **Auth Failures**: Verify credentials and endpoints
-- **Connection Errors**: Check network and database status
-- **Duplicate Data**: Normal for overlapping time windows
-- **Memory Issues**: PM2 auto-restarts on high usage
-- **API Date Range Limit**: The CDR API only accepts date ranges up to 30 days. Set `INITIAL_LOAD_DAYS=30` maximum.
-- **PM2 Path Issues**: Update `ecosystem.config.js` with correct Linux paths in production (not Windows paths)
+## 📼 Call Recording URL Logic
 
-### Performance Tuning
-- Adjust `FETCH_INTERVAL_MINUTES` for data volume
-- Modify PM2 cron schedule based on business needs
-- Monitor database connection pool usage
+- The ETL constructs the `call_recording_url` in the `fact_calls` table as:
+  ```
+  /api/recordings/<call_id>?account=<tenant>
+  ```
+- `<call_id>` is taken directly from the CDR JSON field `call_id`.
+- `<tenant>` is the customer/account identifier from your `.env` config (e.g., `DUBAISOUTH_API_TENANT`).
+- The backend Express route `/api/recordings/:id` extracts the recording ID from the URL path parameter and proxies the request to the upstream API.
+- There is no direct recording URL or ID field in the CDR JSON other than `call_id`.
+
+## 🔄 ETL Logic Summary (Latest)
+- **Phase 1:** Ingests raw CDR JSON into `cdr_raw_data` with duplicate prevention using `msg_id`.
+- **Phase 2:**
+  - Converts the CDR `timestamp` (FILETIME ticks) to a proper date/time for `date_key` and `time_key`.
+  - Constructs `call_recording_url` as described above.
+  - Loads all normalized data into the star schema for analytics.
+
+---
 
 ## 🤝 Contributing
 

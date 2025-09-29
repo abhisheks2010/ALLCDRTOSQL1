@@ -3,7 +3,7 @@
 import os
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import phonenumbers
 
 import mysql.connector
@@ -189,10 +189,26 @@ def process_cdr(cursor, cdr_json):
     Transforms a single raw CDR JSON object and loads it into the star schema.
     """
     # --- 1. Extract and Transform Data ---
-    interaction_time_micro = cdr_json.get("interaction_time", 0)
-    ts = datetime.fromtimestamp(interaction_time_micro / 1000000)
-    date_key = int(ts.strftime('%Y%m%d'))
-    time_key = int(ts.strftime('%H%M%S'))
+    # DEBUG: Log the keys and a sample of the CDR JSON to help identify the recording field
+    logging.info(f"CDR keys: {list(cdr_json.keys())}")
+    logging.info(f"CDR sample: {json.dumps(cdr_json, indent=2)[:1000]}")  # Truncate for readability
+    # Use only 'timestamp' field as FILETIME ticks (original logic)
+    filetime_epoch = datetime(1601, 1, 1)
+    ticks = cdr_json.get("timestamp")
+    if ticks is not None:
+        try:
+            seconds = ticks / 10_000_000
+            ts = filetime_epoch + timedelta(seconds=seconds)
+            date_key = int(ts.strftime('%Y%m%d'))
+            time_key = int(ts.strftime('%H%M%S'))
+        except Exception as e:
+            logging.error(f"Failed to convert timestamp {ticks}: {e}")
+            date_key = None
+            time_key = None
+    else:
+        logging.warning("No 'timestamp' field found in CDR JSON; date_key/time_key set to None.")
+        date_key = None
+        time_key = None
     
     fono_uc_data = cdr_json.get("fonoUC", {})
     disposition = fono_uc_data.get("disposition") or cdr_json.get("disposition")
@@ -256,15 +272,34 @@ def process_cdr(cursor, cdr_json):
     }) if cdr_json.get("campaign_id") else None
 
     # --- 3. Load Fact Table ---
+    # Construct call_recording_url using call_id and tenant/account
+    call_id = cdr_json.get("call_id")
+    tenant = None
+    try:
+        # Try to get tenant/account from config if available
+        import inspect
+        frame = inspect.currentframe()
+        while frame:
+            if 'config' in frame.f_locals:
+                tenant = frame.f_locals['config'].get('api_tenant')
+                break
+            frame = frame.f_back
+    except Exception:
+        tenant = None
+    if call_id and tenant:
+        call_recording_url = f"/api/recordings/{call_id}?account={tenant}"
+    else:
+        call_recording_url = None
+
     fact_call_data = {
-        "msg_id": cdr_json.get("msg_id"), "call_id": cdr_json.get("call_id"),
+        "msg_id": cdr_json.get("msg_id"), "call_id": call_id,
         "date_key": date_key, "time_key": time_key,
         "caller_user_key": caller_user_key, "callee_user_key": callee_user_key,
         "disposition_key": disposition_key, "system_key": system_key,
         "campaign_key": campaign_key, "queue_key": queue_key, # This will now be populated
         "duration_seconds": cdr_json.get("duration_seconds"), 
         "billing_seconds": cdr_json.get("billing_seconds"),
-        "call_recording_url": cdr_json.get("media_name"), 
+        "call_recording_url": call_recording_url,
         "is_conference": cdr_json.get("is_conference", False),
         "follow_up_notes": follow_up_notes
     }
