@@ -227,17 +227,65 @@ def process_cdr(cursor, cdr_json):
     # DEBUG: Log the keys and a sample of the CDR JSON to help identify the recording field
     logging.info(f"CDR keys: {list(cdr_json.keys())}")
     logging.info(f"CDR sample: {json.dumps(cdr_json, indent=2)[:1000]}")  # Truncate for readability
-    # Use only 'timestamp' field as FILETIME ticks (original logic)
-    filetime_epoch = datetime(1601, 1, 1)
+    
+    # Improved timestamp conversion logic to handle multiple formats
+    def convert_timestamp_to_datetime(timestamp_value):
+        """
+        Convert various timestamp formats to Python datetime object
+        Handles: FILETIME ticks, Unix seconds, Unix milliseconds, Gregorian seconds
+        """
+        if timestamp_value is None or timestamp_value == 0:
+            return None
+            
+        try:
+            ts = float(timestamp_value)
+            
+            # Case 1: FILETIME format (Windows epoch from 1601-01-01)
+            # Range: typically 116444736000000000 to 253402300799999999
+            if 116444736000000000 <= ts <= 253402300799999999:
+                filetime_epoch = datetime(1601, 1, 1)
+                seconds = ts / 10_000_000
+                return filetime_epoch + timedelta(seconds=seconds)
+            
+            # Case 2: Gregorian seconds (seconds since 0001-01-01)
+            # Range: typically 60000000000 to 70000000000 (around year 1900-2200)
+            elif 60000000000 <= ts <= 70000000000:
+                # Convert Gregorian seconds to Unix timestamp
+                # Gregorian epoch starts at 0001-01-01, Unix epoch starts at 1970-01-01
+                # Difference is approximately 62167219200 seconds
+                gregorian_to_unix_offset = 62167219200
+                unix_seconds = ts - gregorian_to_unix_offset
+                return datetime.utcfromtimestamp(unix_seconds)
+            
+            # Case 3: Unix milliseconds
+            # Range: 1000000000000 to 9999999999999 (year 2001 to 2286)
+            elif 1000000000000 <= ts <= 9999999999999:
+                return datetime.utcfromtimestamp(ts / 1000)
+            
+            # Case 4: Unix seconds
+            # Range: 946684800 to 4102444800 (year 2000 to 2100)
+            elif 946684800 <= ts <= 4102444800:
+                return datetime.utcfromtimestamp(ts)
+            
+            # Case 5: If none of the above, try as Unix seconds anyway
+            else:
+                logging.warning(f"Timestamp {ts} doesn't match expected ranges, treating as Unix seconds")
+                return datetime.utcfromtimestamp(ts)
+                
+        except Exception as e:
+            logging.error(f"Failed to convert timestamp {timestamp_value}: {e}")
+            return None
+    
+    # Convert timestamp to date and time keys
     ticks = cdr_json.get("timestamp")
     if ticks is not None:
-        try:
-            seconds = ticks / 10_000_000
-            ts = filetime_epoch + timedelta(seconds=seconds)
+        ts = convert_timestamp_to_datetime(ticks)
+        if ts:
             date_key = int(ts.strftime('%Y%m%d'))
             time_key = int(ts.strftime('%H%M%S'))
-        except Exception as e:
-            logging.error(f"Failed to convert timestamp {ticks}: {e}")
+            logging.info(f"Converted timestamp {ticks} to datetime {ts} -> date_key: {date_key}, time_key: {time_key}")
+        else:
+            logging.warning(f"Failed to convert timestamp {ticks}")
             date_key = None
             time_key = None
     else:
