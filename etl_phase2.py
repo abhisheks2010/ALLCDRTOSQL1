@@ -184,6 +184,41 @@ def get_user_key(cursor, number, name, is_agent_update=False):
         "user_name": name, "country_code": country_code, "country_name": country_name
     }, is_agent_update=is_agent_update)
 
+def extract_recording_url(cdr_json, tenant):
+    """
+    Extract recording URL from CDR JSON following the same logic as the frontend
+    Priority: custom_channel_vars.media_recordings > call_id fallback
+    """
+    # First, try to get media_recordings from custom_channel_vars
+    custom_vars = cdr_json.get("custom_channel_vars", {})
+    media_recordings = custom_vars.get("media_recordings")
+    
+    recording_ids = None
+    
+    if media_recordings:
+        # Handle both array and string formats (same as recordingsFetcher.js)
+        if isinstance(media_recordings, list):
+            # Filter out empty IDs and join with comma
+            valid_ids = [str(id).strip() for id in media_recordings if id and str(id).strip()]
+            if valid_ids:
+                recording_ids = ','.join(valid_ids)
+        elif isinstance(media_recordings, str) and media_recordings.strip():
+            recording_ids = media_recordings.strip()
+    
+    # If no media_recordings found, fallback to call_id (backwards compatibility)
+    if not recording_ids:
+        call_id = cdr_json.get("call_id")
+        if call_id:
+            recording_ids = call_id
+    
+    # Construct the URL (same pattern as recordings.js)
+    if recording_ids and tenant:
+        # For multiple recording IDs, we store the comma-separated string
+        # The frontend will split them and create individual buttons
+        return f"/api/recordings/{recording_ids}?account={tenant}"
+    
+    return None
+
 def process_cdr(cursor, cdr_json):
     """
     Transforms a single raw CDR JSON object and loads it into the star schema.
@@ -272,7 +307,7 @@ def process_cdr(cursor, cdr_json):
     }) if cdr_json.get("campaign_id") else None
 
     # --- 3. Load Fact Table ---
-    # Construct call_recording_url using call_id and tenant/account
+    # Extract recording URL using the new logic that matches frontend
     call_id = cdr_json.get("call_id")
     tenant = None
     try:
@@ -286,10 +321,20 @@ def process_cdr(cursor, cdr_json):
             frame = frame.f_back
     except Exception:
         tenant = None
-    if call_id and tenant:
-        call_recording_url = f"/api/recordings/{call_id}?account={tenant}"
+    
+    # Use the new recording URL extraction function
+    call_recording_url = extract_recording_url(cdr_json, tenant)
+    
+    # Add debug logging for recording URL extraction
+    if call_recording_url:
+        logging.info(f"Recording URL extracted: {call_recording_url}")
+        
+        # Log the source data for debugging
+        custom_vars = cdr_json.get("custom_channel_vars", {})
+        media_recordings = custom_vars.get("media_recordings")
+        logging.info(f"Source media_recordings: {media_recordings} (type: {type(media_recordings)})")
     else:
-        call_recording_url = None
+        logging.info(f"No recording URL found for call_id: {cdr_json.get('call_id')}")
 
     fact_call_data = {
         "msg_id": cdr_json.get("msg_id"), "call_id": call_id,
