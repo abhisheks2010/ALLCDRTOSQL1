@@ -29,13 +29,22 @@ pm2 stop allcdr-etl-scheduler
 # Use Ctrl+C to stop running ETL
 ```
 
-### Step 3: Run the Database Cleanup
+### Step 3: Test Database Connection First
 
 ```bash
 # Navigate to your project directory
 cd /home/multycomm/allcdrpipeline/ALLCDRTOSQL1
 
-# Run the production fix script
+# Test connection with different credentials
+python3 test_production_connection.py
+```
+
+This will test different credential combinations and show you which one works.
+
+### Step 4: Run the Database Cleanup
+
+```bash
+# Run the production fix script (now with multiple credential fallbacks)
 python3 production_fix_dates.py
 ```
 
@@ -56,12 +65,14 @@ python3 production_fix_dates.py
 🎉 ALL DATABASES ARE CLEAN!
 ```
 
-### Step 4: Verify the Fix
+### Step 5: Verify the Fix
 
 Check the databases manually:
 
 ```sql
--- Connect to MySQL
+-- Connect to MySQL with working credentials
+mysql -u ShamsUser -p'$MJR732o}jVz[?PN'
+# or
 mysql -u root -p
 
 -- Check each database
@@ -79,7 +90,7 @@ USE allcdr_dubaisouth;
 SELECT * FROM dim_date;
 ```
 
-### Step 5: Test ETL Pipeline
+### Step 6: Test ETL Pipeline
 
 ```bash
 # Test single customer
@@ -90,7 +101,7 @@ python3 run_pipeline.py shams
 # "Converted timestamp XXXXX to datetime 2025-10-01 -> date_key: 20251001"
 ```
 
-### Step 6: Restart Production ETL
+### Step 7: Restart Production ETL
 
 ```bash
 # Restart PM2 process

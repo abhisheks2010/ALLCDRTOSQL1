@@ -21,17 +21,53 @@ def fix_production_dates():
     print("🏥 PRODUCTION DATE FIX SCRIPT")
     print("="*50)
     
+    # Try different credential sets for production
+    db_configs = [
+        {
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'user': 'ShamsUser',
+            'password': '$MJR732o}jVz[?PN'
+        },
+        {
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'user': os.getenv('DB_USER', 'root'),
+            'password': os.getenv('DB_PASSWORD')
+        },
+        {
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'user': 'root',
+            'password': 'rootpass'
+        }
+    ]
+    
     for db_name in databases:
+        connection = None
+        success = False
+        
+        for config in db_configs:
+            try:
+                print(f"\n🔧 Processing {db_name}...")
+                print(f"   🔐 Trying connection with user: {config['user']}")
+                
+                connection = mysql.connector.connect(
+                    host=config['host'],
+                    user=config['user'],
+                    password=config['password'],
+                    database=db_name
+                )
+                print(f"   ✅ Connected successfully!")
+                success = True
+                break
+                
+            except mysql.connector.Error as e:
+                print(f"   ❌ Connection failed with {config['user']}: {e}")
+                continue
+        
+        if not success:
+            print(f"   💥 All connection attempts failed for {db_name}")
+            continue
+        
         try:
-            print(f"\n🔧 Processing {db_name}...")
-            
-            connection = mysql.connector.connect(
-                host=os.getenv('DB_HOST'),
-                user=os.getenv('DB_USER'),
-                password=os.getenv('DB_PASSWORD'),
-                database=db_name
-            )
-            
             cursor = connection.cursor()
             
             # Step 1: Check current state
@@ -143,14 +179,47 @@ def verify_fix():
     
     total_invalid = 0
     
+    # Try different credential sets for production
+    db_configs = [
+        {
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'user': 'ShamsUser',
+            'password': '$MJR732o}jVz[?PN'
+        },
+        {
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'user': os.getenv('DB_USER', 'root'),
+            'password': os.getenv('DB_PASSWORD')
+        },
+        {
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'user': 'root',
+            'password': 'rootpass'
+        }
+    ]
+    
     for db_name in databases:
+        connection = None
+        success = False
+        
+        for config in db_configs:
+            try:
+                connection = mysql.connector.connect(
+                    host=config['host'],
+                    user=config['user'],
+                    password=config['password'],
+                    database=db_name
+                )
+                success = True
+                break
+            except mysql.connector.Error:
+                continue
+        
+        if not success:
+            print(f"{db_name:20} ❌ ERROR    Connection failed with all credentials")
+            continue
+        
         try:
-            connection = mysql.connector.connect(
-                host=os.getenv('DB_HOST'),
-                user=os.getenv('DB_USER'),
-                password=os.getenv('DB_PASSWORD'),
-                database=db_name
-            )
             
             cursor = connection.cursor()
             
