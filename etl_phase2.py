@@ -235,7 +235,8 @@ def process_cdr(cursor, cdr_json):
         Handles: FILETIME ticks, Unix seconds, Unix milliseconds, Gregorian seconds
         """
         if timestamp_value is None or timestamp_value == 0:
-            return None
+            logging.warning("Timestamp is None or 0, using current time")
+            return datetime.utcnow()
             
         try:
             ts = float(timestamp_value)
@@ -245,7 +246,12 @@ def process_cdr(cursor, cdr_json):
             if 116444736000000000 <= ts <= 253402300799999999:
                 filetime_epoch = datetime(1601, 1, 1)
                 seconds = ts / 10_000_000
-                return filetime_epoch + timedelta(seconds=seconds)
+                result = filetime_epoch + timedelta(seconds=seconds)
+                # Validate the result is reasonable (not before year 2000)
+                if result.year < 2000:
+                    logging.warning(f"FILETIME conversion resulted in year {result.year}, using current time")
+                    return datetime.utcnow()
+                return result
             
             # Case 2: Gregorian seconds (seconds since 0001-01-01)
             # Range: typically 60000000000 to 70000000000 (around year 1900-2200)
@@ -255,26 +261,39 @@ def process_cdr(cursor, cdr_json):
                 # Difference is approximately 62167219200 seconds
                 gregorian_to_unix_offset = 62167219200
                 unix_seconds = ts - gregorian_to_unix_offset
-                return datetime.utcfromtimestamp(unix_seconds)
+                result = datetime.utcfromtimestamp(unix_seconds)
+                # Validate the result is reasonable
+                if result.year < 2000 or result.year > 2030:
+                    logging.warning(f"Gregorian conversion resulted in year {result.year}, using current time")
+                    return datetime.utcnow()
+                return result
             
             # Case 3: Unix milliseconds
             # Range: 1000000000000 to 9999999999999 (year 2001 to 2286)
             elif 1000000000000 <= ts <= 9999999999999:
-                return datetime.utcfromtimestamp(ts / 1000)
+                result = datetime.utcfromtimestamp(ts / 1000)
+                if result.year < 2000 or result.year > 2030:
+                    logging.warning(f"Unix milliseconds conversion resulted in year {result.year}, using current time")
+                    return datetime.utcnow()
+                return result
             
             # Case 4: Unix seconds
             # Range: 946684800 to 4102444800 (year 2000 to 2100)
             elif 946684800 <= ts <= 4102444800:
-                return datetime.utcfromtimestamp(ts)
+                result = datetime.utcfromtimestamp(ts)
+                if result.year < 2000 or result.year > 2030:
+                    logging.warning(f"Unix seconds conversion resulted in year {result.year}, using current time")
+                    return datetime.utcnow()
+                return result
             
-            # Case 5: If none of the above, try as Unix seconds anyway
+            # Case 5: If none of the above, use current time instead of invalid conversion
             else:
-                logging.warning(f"Timestamp {ts} doesn't match expected ranges, treating as Unix seconds")
-                return datetime.utcfromtimestamp(ts)
+                logging.warning(f"Timestamp {ts} doesn't match expected ranges, using current time instead")
+                return datetime.utcnow()
                 
         except Exception as e:
-            logging.error(f"Failed to convert timestamp {timestamp_value}: {e}")
-            return None
+            logging.error(f"Failed to convert timestamp {timestamp_value}: {e}, using current time")
+            return datetime.utcnow()
     
     # Convert timestamp to date and time keys
     ticks = cdr_json.get("timestamp")
@@ -285,13 +304,17 @@ def process_cdr(cursor, cdr_json):
             time_key = int(ts.strftime('%H%M%S'))
             logging.info(f"Converted timestamp {ticks} to datetime {ts} -> date_key: {date_key}, time_key: {time_key}")
         else:
-            logging.warning(f"Failed to convert timestamp {ticks}")
-            date_key = None
-            time_key = None
+            logging.warning(f"Failed to convert timestamp {ticks}, using current time")
+            current_time = datetime.utcnow()
+            ts = current_time
+            date_key = int(current_time.strftime('%Y%m%d'))
+            time_key = int(current_time.strftime('%H%M%S'))
     else:
-        logging.warning("No 'timestamp' field found in CDR JSON; date_key/time_key set to None.")
-        date_key = None
-        time_key = None
+        logging.warning("No 'timestamp' field found in CDR JSON; using current time.")
+        current_time = datetime.utcnow()
+        ts = current_time
+        date_key = int(current_time.strftime('%Y%m%d'))
+        time_key = int(current_time.strftime('%H%M%S'))
     
     fono_uc_data = cdr_json.get("fonoUC", {})
     disposition = fono_uc_data.get("disposition") or cdr_json.get("disposition")
@@ -311,13 +334,17 @@ def process_cdr(cursor, cdr_json):
         subdisposition_1 = cdr_json.get("subdisposition")
 
     # --- 2. Handle Dimensions (Get or Create Keys) ---
-    get_or_create_key(cursor, "date", {"date_key": date_key}, {
-        "full_date": ts.date(), "year": ts.year, 
-        "quarter": (ts.month - 1) // 3 + 1, "month": ts.month, "day_of_week": ts.strftime('%A')
-    })
-    get_or_create_key(cursor, "time_of_day", {"time_key": time_key}, {
-        "full_time": ts.time(), "hour": ts.hour, "minute": ts.minute
-    })
+    # Ensure we have valid datetime object for dimension creation
+    if ts and date_key and time_key:
+        get_or_create_key(cursor, "date", {"date_key": date_key}, {
+            "full_date": ts.date(), "year": ts.year, 
+            "quarter": (ts.month - 1) // 3 + 1, "month": ts.month, "day_of_week": ts.strftime('%A')
+        })
+        get_or_create_key(cursor, "time_of_day", {"time_key": time_key}, {
+            "full_time": ts.time(), "hour": ts.hour, "minute": ts.minute
+        })
+    else:
+        logging.warning(f"Skipping dimension creation due to invalid datetime: ts={ts}, date_key={date_key}, time_key={time_key}")
 
     caller_user_key = get_user_key(cursor, cdr_json.get('caller_id_number'), cdr_json.get('caller_id_name'))
     callee_user_key = get_user_key(cursor, cdr_json.get('callee_id_number'), cdr_json.get('callee_id_name'))
